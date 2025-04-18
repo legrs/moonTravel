@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ja">
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            body{
+                overflow: hidden;
+            }
+        </style>
+        <title>月へいこう(激ムズ)</title>
+    </head>
+    <body>
+        <h2>月へいこう！探査機はカーソルの方向に向くよ。キーを押すと進行方向に推力が生れるよ。</h1>
+        <div style="position:relative;bottom:20px;" >
+        <p >実時間の3600倍(10時間1秒)，dt=1msの前進オイラー法で計算しています。精度は低いです。月の運動も角運動量を一定にしています。
+        太陽と地球を固定した座標系です。太陽は左側です
+        <br>とても難しいです。部員は1度だけ月周回軌道に入れました
+        <br>※ 部員が昨日急きょ作ったゲームです。大目にみてください。</p>
+        <table border="1px solid #000">
+            <thead>
+                <th>キー</th>
+                <th>加速度(m/s^2)</th>
+            </thead>
+            <tr>
+                <td>z</td>
+                <td>0.05</td>
+            </tr>
+            <tr>
+                <td>x</td>
+                <td>0.01</td>
+            </tr>
+            <tr>
+                <td>c</td>
+                <td>0.005</td>
+            </tr>
+            <tr>
+                <td>v</td>
+                <td>0.001</td>
+            </tr>
+            <tr>
+                <td>b</td>
+                <td>0.0005</td>
+            </tr>
+        </table>
+        <p id="tel" style="position:absolute;top:100px;left:250px;"></p>
+        表示倍率：1km -> 1/<input type="number" id="perr" value="2500"/>px
+        <input type="button" id="perBtn" value="確定"/>          
+        <input type="button" id="run" style="margin-left:50px;" value="  - RUN -  "/>
+        <input type="button" id="reset" value="  - RESET -  "/>
+        <canvas id="canvas" width="1000px" height="1000px" style="border:1px solid #000;">aiueo</canvas>
+
+    </div>
+        <script>
+let timescale = 36000;
+let per = 2500;
+const dt = 1; //計算精度
+const timestep = dt * 50;
+
+let canv = document.getElementById("canvas");
+let run = document.getElementById("run");
+let reset = document.getElementById("reset");
+let perr = document.getElementById("perr");
+let perBtn = document.getElementById("perBtn");
+let tel = document.getElementById("tel");
+const ctx = canv.getContext("2d");
+const yOfs = 300;
+const radi = [2,4,5]; // orbit moon earth
+
+let aa = 0;
+let EM = 0;
+
+let width = document.body.clientWidth;
+let height = document.documentElement.clientHeight - yOfs;
+let mX = 1;
+let mY = 1;
+canv.width = width;
+canv.height = height;
+
+// variable for debug
+
+
+
+let pos = [
+    [149600000, 0], //earth
+    [149900000, 0] // moon
+];
+let pos2 = [ //描画よう
+    [42164, 0],  //orbit
+    [300000, 0] //moon
+            ];
+const grav = [398600400, 4902800, 132712440000000]; // km2 m / s2
+const dist = [149600000, 380000]
+//             earth       moon      sun
+const dia = [12756  ,    3474.8];
+const powe = [0 , 0.05 , 0.01 , 0.005 , 0.001 , 0.0005]; //m/ss
+let p = [149642164, 0];
+let v = [0, 33000]; // m/s
+let a = [0, 0]; // m/s2
+let m = [0,1]; // orbitの向く方向 単位ベクトル
+let t = 0;
+let tmp = 0;
+let fuel = 0;
+let mem = [[]];
+
+//index
+//  0     1   2
+// orbit moon sun
+
+
+function cd(){
+    for(let i=0; i<timestep/dt; i++){
+        calCel(pos);
+        calAcce(p[0],p[1],aa);
+        v[0] += dt * timescale * a[0] / 1000; //dtはms 1/1000 はdtにかかっている
+        v[1] += dt * timescale * a[1] / 1000;
+        p[0] += dt * timescale * v[0] / 1000000;
+        p[1] += dt * timescale * v[1] / 1000000;
+        t += dt * timescale / 1000;
+    }
+
+    pos2[0][0] = p[0] - pos[0][0];
+    pos2[0][1] = p[1] - pos[0][1];
+    pos2[1][0] = pos[1][0] - pos[0][0];
+    pos2[1][1] = pos[1][1] - pos[0][1];
+
+    tmp = pos2[0][0];
+    pos2[0][0] = pos2[0][0] * Math.cos(EM) + pos2[0][1] * Math.sin(EM) ;
+    pos2[0][1] = pos2[0][1] * Math.cos(EM)  - tmp * Math.sin(EM) ;
+    tmp = pos2[1][0];
+    pos2[1][0] = pos2[1][0] * Math.cos(EM) + pos2[1][1] * Math.sin(EM) ;
+    pos2[1][1] = pos2[1][1] * Math.cos(EM)  - tmp * Math.sin(EM) ;
+
+    let x = mX - ((width/2) + (pos2[0][0]/per));
+    let y = mY - ((height/2) + (pos2[0][1]/per));
+    let k = Math.sqrt(Math.pow(x,2)+Math.pow(y,2));
+    m[0] = x / k;
+    m[1] = y / k;
+    draw();
+
+}
+
+function calCel(arr){
+    EM = (t/31536000) % 1;
+    EM = EM * Math.PI * 2;
+    arr[0][0] = Math.cos(EM) * dist[0];
+    arr[0][1] = Math.sin(EM) * dist[0];
+    let M = (t/2360448) % 1;
+    M = M * Math.PI * 2;
+    arr[1][0] = arr[0][0] + (Math.cos(M) * dist[1]);
+    arr[1][1] = arr[0][1] + (Math.sin(M) * dist[1]);
+}
+
+let d = [1 , 1 , 1.4];
+function calAcce(px,py,thrust){
+    a = [0,0];
+    for(let i=0; i<3; i++){
+        if( i==2 ){
+            d[0] = -px;
+            d[1] = -py;
+        }else{
+            d[0] = pos[i][0] - px;
+            d[1] = pos[i][1] - py;
+        }
+        d[3] = Math.sqrt( Math.pow(d[0], 2) + Math.pow(d[1], 2));
+        if( i!=2 ){
+            if( d[3] < dia[i]){
+                console.log("aaaaaaaaaaa");
+                p = [0,0];
+            }
+        }
+        d[3] = Math.pow(d[3] , 3);
+        if( d[3] != 0 ){
+            a[0] += d[0] * grav[i] / d[3];
+            a[1] += d[1] * grav[i] / d[3];
+        }
+        a[0] += m[0] * powe[thrust];
+        a[1] += m[1] * powe[thrust];
+        fuel += powe[thrust];
+    }
+}
+function draw(){
+    ctx.clearRect(0,0,canv.width,canv.height);
+    // earth
+    ctx.fillStyle = "blue";
+    ctx.beginPath();
+    ctx.arc( width/2 , height/2 , radi[2] , 0 , Math.PI * 2 , false );
+    ctx.fill();
+    // moon orbit
+    ctx.strokeStyle = "red";
+    ctx.beginPath();
+    ctx.arc( width/2 , height/2 , dist[1]/per , 0 , Math.PI * 2 , false );
+    ctx.stroke();
+
+    mem.push([pos2[0][0],pos2[0][1]]);
+    ctx.strokeStyle = "black"
+    ctx.beginPath();
+    ctx.moveTo((width/2) + mem[0][0]/per , (height/2) + mem[0][1]/per );
+    for(let i=0; i<mem.length; i++){
+        ctx.lineTo((width/2) + mem[i][0]/per , (height/2) + mem[i][1]/per );
+    }
+    ctx.stroke();
+
+    // celestias 
+    ctx.fillStyle = "red";
+    ctx.beginPath();
+    ctx.arc( (width/2) + pos2[1][0]/per , (height/2) + pos2[1][1]/per , radi[1] , 0 , Math.PI * 2 , false );
+    ctx.fill();
+    ctx.fillStyle = "black";
+    ctx.beginPath();
+    ctx.arc( (width/2) + pos2[0][0]/per , (height/2) + pos2[0][1]/per , radi[0] , 0 , Math.PI * 2 , false );
+    ctx.fill();
+    tel.innerText = `位置x：${pos2[0][0]} km \n　　y：${pos2[0][1]} km \n速さ：${Math.sqrt(Math.pow(v[0],2)+Math.pow(v[1],2))} m/s \n加速度：${Math.sqrt(Math.pow(a[0],2)+Math.pow(a[1],2))} m/ss \n加えた加速度：${fuel} m/ss`;
+
+}
+
+reset.addEventListener("click",resetS);
+
+function resetS(){
+    p = [149642164, 0];
+    v = [0, 33000]; // m/s
+    t = 0;
+    fuel = 0;
+    mem = [[]];
+}
+
+canv.addEventListener("mousemove",(event)=>{
+    mX = event.offsetX;
+    mY = event.offsetY;
+    console.log(mX,mY);
+});
+
+perBtn.addEventListener("click",()=>{
+    per = parseFloat(perr.value);
+})
+
+
+document.addEventListener("keydown",(event)=>{
+    if(event.keyCode == 90){
+        aa = 1;
+    }else if(event.keyCode == 88){
+        aa = 2;
+    }else if(event.keyCode == 67){
+        aa = 3;
+    }else if(event.keyCode == 86){
+        aa = 4;
+    }else if(event.keyCode == 66){
+        aa = 5;
+    }
+});
+document.addEventListener("keyup",()=>{
+    aa = 0;
+});
+
+
+let loop;
+
+run.addEventListener("click", ()=>{
+    if(run.value == "  - RUN -  "){
+        clearInterval(loop);
+        loop = setInterval(cd, timestep)
+        run.value = "  - STOP -  ";
+    }else{
+        clearInterval(loop);
+        run.value = "  - RUN -  ";
+    }
+});
+
+function resizeWindow(){
+    width = document.body.clientWidth;
+    height = document.documentElement.clientHeight - yOfs;
+
+    canv.width = width;
+    canv.height = height;
+    
+}
+
+//run.click();
+window.onresize = resizeWindow;
+</script>
+    </body>
+</html>
+
